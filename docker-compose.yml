@@ -1,0 +1,56 @@
+version: "3.8"
+
+# One-command full stack: trains the model (if needed), serves the
+# Streamlit UI, and stands up Tempo + Grafana for trace visualization.
+#
+# Setup: create a .env file first (copy .env.example) with your
+# GEMINI_API_KEY -- docker compose will refuse to start without it.
+#
+# Run:
+#   docker compose up --build
+#
+# Then:
+#   App:      http://localhost:8501
+#   Grafana:  http://localhost:3000  (Explore -> Tempo datasource)
+#   Tempo:    receives traces on 4317, queried by Grafana on 3200
+
+services:
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "4317:4317"
+      - "3200:3200"
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      # anonymous admin access for local dev convenience only -- do not do
+      # this on a publicly reachable host
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    depends_on:
+      - tempo
+
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - OTEL_EXPORTER=otlp
+      - OTEL_EXPORTER_ENDPOINT=tempo:4317
+    volumes:
+      # bind-mount the whole project so mlflow.db, models/, artifacts/
+      # created inside the container persist on your machine and are
+      # visible if you also run `mlflow ui` directly on the host
+      - .:/app
+    depends_on:
+      - tempo
