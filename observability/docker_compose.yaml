@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver -- this is what your Python app sends spans to
+      - "3200:3200"   # Tempo's query API -- Grafana reads from here
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      # anonymous admin access for local dev convenience only -- do not do
+      # this on a publicly reachable host
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    depends_on:
+      - tempo
